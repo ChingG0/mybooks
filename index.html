@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>啾啾說書 — 直式 PDF 有聲書</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===== HEADER ===== -->
+<header>
+  <div class="header-left">
+    <div class="logo">👟</div>
+    <div>
+      <div class="header-title">啾啾說書</div>
+      <div class="header-sub">直式 PDF 有聲書閱讀器</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="header-badge" id="voiceStatus">🔊 語音就緒</div>
+  </div>
+</header>
+
+<!-- ===== MAIN LAYOUT ===== -->
+<div class="app-layout">
+
+  <!-- 左側控制欄 -->
+  <aside class="sidebar">
+
+    <!-- 上傳區 -->
+    <section class="panel">
+      <div class="panel-title">📄 上傳 PDF</div>
+      <div class="upload-zone" id="uploadZone">
+        <input type="file" id="pdfFileInput" accept=".pdf">
+        <div class="upload-content" id="uploadContent">
+          <span class="upload-icon">📚</span>
+          <div class="upload-text">拖曳或點擊上傳</div>
+          <div class="upload-hint">支援直式繁體中文 PDF</div>
+        </div>
+      </div>
+      <div class="file-info" id="fileInfo" style="display:none">
+        <div class="file-icon">📑</div>
+        <div class="file-meta">
+          <div class="file-name" id="fileNameLabel">—</div>
+          <div class="file-detail" id="fileDetailLabel">—</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 我的藏書按鈕 -->
+    <button class="library-btn" onclick="openLibraryModal()">
+      <span class="library-btn-icon">📚</span>
+      <div class="library-btn-text">
+        <span class="library-btn-title">我的藏書</span>
+        <span class="library-btn-sub">點此瀏覽所有書籍</span>
+      </div>
+      <span class="library-count" id="libraryCount">0 本</span>
+    </button>
+
+    <!-- 語速 -->
+    <section class="panel">
+      <div class="panel-title">⚡ 語速 &amp; 人聲</div>
+
+      <!-- 語速 -->
+      <div class="speed-row">
+        <span class="speed-emoji">🐢</span>
+        <input type="range" id="speedSlider" min="0.5" max="2.0" step="0.1" value="1.0"
+               oninput="onSpeedChange(this.value)">
+        <span class="speed-emoji">🐇</span>
+        <span class="speed-badge" id="speedBadge">1.0x</span>
+      </div>
+
+      <!-- 人聲選擇 -->
+      <div class="voice-row">
+        <span class="voice-label">🔊 人聲</span>
+        <select id="voiceSelect" class="voice-select" onchange="onVoiceChange(this.value)">
+          <option value="">載入中...</option>
+        </select>
+      </div>
+    </section>
+
+    <!-- 說明 -->
+    <section class="tip-box">
+      <div class="tip-icon">💡</div>
+      <div class="tip-text">
+        掃描版 PDF 使用 <strong>Google Vision OCR</strong>，支援繁體直式，每月 1000 次免費。請填入左側 API Key。
+      </div>
+    </section>
+
+    <!-- 載入 JSON 快取 -->
+    <section class="panel json-panel">
+      <div class="panel-title">⚡ 載入已辨識 JSON</div>
+      <div class="upload-zone json-zone" id="jsonUploadZone">
+        <input type="file" id="jsonFileInput" accept=".json,.juju.json"
+               onchange="loadJson(this.files[0])">
+        <div class="upload-content">
+          <span class="upload-icon" style="font-size:1.6rem">⚡</span>
+          <div class="upload-text" style="font-size:0.75rem">載入 .juju.json</div>
+          <div class="upload-hint">跳過 OCR，直接朗讀</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- mybooks 操作提示（儲存後顯示） -->
+    <div id="mybooksHint" class="mybooks-hint" style="display:none"></div>
+
+    <!-- API Key -->
+    <section class="panel api-panel">
+      <div class="panel-title">🔑 Google Vision API Key</div>
+      <input type="password" id="apiKeyInput" class="api-key-input"
+             placeholder="AIzaSy..." autocomplete="off">
+      <div class="api-hint">
+        每月前 1000 次免費，繁中直式準確率高<br>
+        <a href="https://console.cloud.google.com/apis/library/vision.googleapis.com" target="_blank">開啟 Vision API →</a>
+      </div>
+    </section>
+
+    <button class="debug-toggle-btn" onclick="toggleDebug()">🐛 Debug 面板</button>
+
+  </aside>
+
+  <!-- 右側主區域 -->
+  <main class="main-area">
+
+    <!-- 播放控制列 -->
+    <div class="player-bar">
+      <!-- 目前檔案資訊 -->
+      <div class="now-playing">
+        <div class="now-icon">😄</div>
+        <div class="now-info">
+          <div class="now-title" id="nowTitle">等待上傳 PDF...</div>
+          <div class="now-sub" id="nowSub">上傳後即可開始朗讀</div>
+        </div>
+      </div>
+
+      <!-- 頁碼翻頁 -->
+      <div class="page-ctrl">
+        <button class="btn-page" id="btnPrevPage" onclick="prevPage()" disabled>◀ 上頁</button>
+        <div class="page-display">
+          <span id="pageCurrentLabel">—</span>
+          <span class="page-sep"> / </span>
+          <span id="pageTotalLabel">—</span>
+          <span style="font-size:0.65rem;color:var(--mid);margin-left:4px;">頁</span>
+        </div>
+        <button class="btn-page" id="btnNextPage" onclick="nextPage()" disabled>下頁 ▶</button>
+      </div>
+
+      <!-- 播放按鈕 -->
+      <div class="play-ctrl">
+        <div class="status-pill idle" id="statusPill">
+          <span class="status-dot"></span>
+          <span id="statusText">就緒</span>
+        </div>
+        <button class="btn-stop" onclick="stopReading()" title="停止">⏹</button>
+        <button class="btn-play" id="btnPlay" onclick="togglePlay()" disabled>▶</button>
+      </div>
+    </div>
+
+    <!-- 頁面顯示區 -->
+    <div class="viewer-area">
+
+      <!-- 空狀態 -->
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">📖</div>
+        <div class="empty-title">還沒有內容</div>
+        <div class="empty-desc">上傳直式繁中 PDF，啾啾鞋幫你說書！</div>
+      </div>
+
+      <!-- Loading / Progress -->
+      <div class="loading-state" id="loadingState" style="display:none">
+        <div class="load-card">
+          <!-- 動畫圖示 -->
+          <div class="load-icon" id="loadIcon">📖</div>
+
+          <!-- 標題 -->
+          <div class="load-title" id="loadingText">讀取中...</div>
+
+          <!-- 副標（目前步驟） -->
+          <div class="load-sub" id="loadingSub">請稍候</div>
+
+          <!-- 進度條 -->
+          <div class="load-bar-wrap">
+            <div class="load-bar-track">
+              <div class="load-bar-fill" id="loadBarFill"></div>
+            </div>
+            <div class="load-bar-labels">
+              <span id="loadBarLeft">0%</span>
+              <span id="loadBarRight">—</span>
+            </div>
+          </div>
+
+          <!-- 步驟列表 -->
+          <div class="load-steps" id="loadSteps">
+            <div class="load-step" id="step-read">
+              <span class="step-icon">⏳</span>
+              <span class="step-label">讀取檔案</span>
+            </div>
+            <div class="load-step" id="step-parse">
+              <span class="step-icon">⏳</span>
+              <span class="step-label">解析 PDF 結構</span>
+            </div>
+            <div class="load-step" id="step-text">
+              <span class="step-icon">⏳</span>
+              <span class="step-label">擷取文字內容</span>
+            </div>
+            <div class="load-step" id="step-render">
+              <span class="step-icon">⏳</span>
+              <span class="step-label">渲染第一頁</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 錯誤狀態 -->
+      <div class="error-state" id="errorState" style="display:none">
+        <div class="error-icon">💥</div>
+        <div class="error-title">上傳失敗</div>
+        <div class="error-msg" id="errorMsg">發生未知錯誤</div>
+        <div class="error-tips" id="errorTips"></div>
+        <button class="error-retry-btn" onclick="retryUpload()">🔄 重新上傳</button>
+      </div>
+
+      <!-- 頁面展示：左圖 + 右文字 -->
+      <div class="page-view" id="pageView" style="display:none">
+
+        <!-- PDF 渲染圖 -->
+        <div class="canvas-col">
+          <div class="canvas-label">📄 原始頁面</div>
+          <div class="canvas-container">
+            <canvas id="pdfCanvas"></canvas>
+            <div class="reading-badge" id="readingBadge" style="display:none">
+              🎙️ 朗讀中
+            </div>
+          </div>
+        </div>
+
+        <!-- 擷取文字 -->
+        <div class="text-col">
+          <div class="text-col-header">
+            <span>📝 擷取文字</span>
+            <div style="display:flex;align-items:center;gap:0.4rem;">
+              <span class="cache-status" id="cacheStatus"></span>
+              <button class="btn-save-json" id="btnSaveJson"
+                      onclick="saveAsJson()" style="display:none">
+                💾 儲存辨識結果
+              </button>
+              <span class="char-badge" id="charBadge">—</span>
+            </div>
+          </div>
+          <div class="ocr-status-bar" id="ocrStatus" style="display:none"></div>
+          <div class="text-scroll" id="textScroll">
+            <p style="color:#bbb;font-size:0.8rem;">載入頁面後顯示...</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 底部進度列 -->
+    <div class="progress-bar-row" id="progressBarRow" style="display:none">
+      <div class="prog-track">
+        <div class="prog-fill" id="progFill"></div>
+      </div>
+      <div class="prog-labels">
+        <span id="progLeft">第 1 頁</span>
+        <span id="progRight">0%</span>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Debug Panel -->
+<div class="debug-panel" id="debugPanel" style="display:none">
+  <div class="debug-header">
+    🐛 DEBUG
+    <button onclick="document.getElementById('debugBody').innerHTML=''">清除</button>
+    <button onclick="toggleDebug()">關閉</button>
+  </div>
+  <div class="debug-body" id="debugBody"></div>
+</div>
+
+<script src="app.js"></script>
+
+<!-- ── 藏書 Modal ── -->
+<div id="libraryModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeLibraryModal()">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">📚 我的藏書</div>
+      <div class="modal-header-right">
+        <input type="text" id="modalSearch" class="modal-search"
+               placeholder="搜尋書名..." oninput="renderLibraryModal()">
+        <button class="modal-close" onclick="closeLibraryModal()">✕</button>
+      </div>
+    </div>
+    <div class="modal-grid" id="modalGrid">
+      <div class="modal-empty">
+        <div style="font-size:3rem;margin-bottom:0.75rem">📚</div>
+        <div>還沒有書，辨識 PDF 後會自動加入</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
