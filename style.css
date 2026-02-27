@@ -1732,3 +1732,111 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .dl-btn-secondary:hover {
   color: #666;
 }
+
+/* ══════════════════════════════════════════
+   全版閱讀模式（JSON 書籍）
+══════════════════════════════════════════ */
+
+.reader-layout {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: #fdfaf5;
+}
+
+.reader-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1.5px solid #f0e0c8;
+  background: white;
+  flex-shrink: 0;
+  gap: 1rem;
+}
+
+.reader-title-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--mid);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reader-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.reading-badge-inline {
+  background: rgba(255,107,43,0.12);
+  color: var(--orange);
+  border: 1px solid rgba(255,107,43,0.3);
+  border-radius: 20px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  animation: pulse 1.5s infinite;
+}
+
+/* 內文區域 */
+.reader-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2rem 3rem;
+  line-height: 2.2;
+  font-size: 1.05rem;
+  color: #2a1a08;
+  font-family: 'Noto Sans TC', 'Noto Serif TC', serif;
+  letter-spacing: 0.05em;
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.reader-body::-webkit-scrollbar { width: 6px; }
+.reader-body::-webkit-scrollbar-track { background: transparent; }
+.reader-body::-webkit-scrollbar-thumb { background: #e0cdb8; border-radius: 4px; }
+
+.reader-para {
+  margin: 0 0 1.2rem 0;
+  text-indent: 2em;
+  border-radius: 6px;
+  padding: 0.2rem 0.4rem;
+  transition: background 0.2s;
+}
+
+.reader-para.reading-now {
+  background: rgba(255, 107, 43, 0.1);
+  border-left: 3px solid var(--orange);
+  text-indent: calc(2em - 3px);
+  padding-left: 0.6rem;
+}
+
+.reader-empty {
+  color: #bbb;
+  text-align: center;
+  margin-top: 4rem;
+  font-size: 0.9rem;
+}
+
+/* PDF 模式保持原來的左右分欄 */
+.pdf-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* page-view 改為 flex column */
+.page-view {
+  display: flex !important;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}

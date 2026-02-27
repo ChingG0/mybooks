@@ -225,36 +225,50 @@
         <button class="error-retry-btn" onclick="retryUpload()">🔄 重新上傳</button>
       </div>
 
-      <!-- 頁面展示：左圖 + 右文字 -->
+      <!-- 頁面展示 -->
       <div class="page-view" id="pageView" style="display:none">
 
-        <!-- PDF 渲染圖 -->
-        <div class="canvas-col">
-          <div class="canvas-label">📄 原始頁面</div>
-          <div class="canvas-container">
-            <canvas id="pdfCanvas"></canvas>
-            <div class="reading-badge" id="readingBadge" style="display:none">
-              🎙️ 朗讀中
+        <!-- PDF 模式：左圖 + 右文字 -->
+        <div class="pdf-layout" id="pdfLayout">
+          <div class="canvas-col">
+            <div class="canvas-label">📄 原始頁面</div>
+            <div class="canvas-container">
+              <canvas id="pdfCanvas"></canvas>
+              <div class="reading-badge" id="readingBadge" style="display:none">
+                🎙️ 朗讀中
+              </div>
+            </div>
+          </div>
+          <div class="text-col">
+            <div class="text-col-header">
+              <span>📝 擷取文字</span>
+              <div style="display:flex;align-items:center;gap:0.4rem;">
+                <span class="cache-status" id="cacheStatus"></span>
+                <button class="btn-save-json" id="btnSaveJson"
+                        onclick="saveAsJson()" style="display:none">
+                  💾 儲存辨識結果
+                </button>
+                <span class="char-badge" id="charBadge">—</span>
+              </div>
+            </div>
+            <div class="ocr-status-bar" id="ocrStatus" style="display:none"></div>
+            <div class="text-scroll" id="textScroll">
+              <p style="color:#bbb;font-size:0.8rem;">載入頁面後顯示...</p>
             </div>
           </div>
         </div>
 
-        <!-- 擷取文字 -->
-        <div class="text-col">
-          <div class="text-col-header">
-            <span>📝 擷取文字</span>
-            <div style="display:flex;align-items:center;gap:0.4rem;">
-              <span class="cache-status" id="cacheStatus"></span>
-              <button class="btn-save-json" id="btnSaveJson"
-                      onclick="saveAsJson()" style="display:none">
-                💾 儲存辨識結果
-              </button>
+        <!-- JSON 模式：全版文字閱讀 -->
+        <div class="reader-layout" id="readerLayout" style="display:none">
+          <div class="reader-header">
+            <span class="reader-title-label" id="readerTitleLabel">—</span>
+            <div class="reader-controls">
+              <span class="reading-badge-inline" id="readingBadge2" style="display:none">🎙️ 朗讀中</span>
               <span class="char-badge" id="charBadge">—</span>
             </div>
           </div>
-          <div class="ocr-status-bar" id="ocrStatus" style="display:none"></div>
-          <div class="text-scroll" id="textScroll">
-            <p style="color:#bbb;font-size:0.8rem;">載入頁面後顯示...</p>
+          <div class="reader-body" id="readerBody">
+            <p style="color:#bbb">載入中...</p>
           </div>
         </div>
 

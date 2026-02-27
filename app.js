@@ -42,16 +42,10 @@ const PREFETCH     = 2;       // 預載接下來幾頁
 const JUJU = {
   pitch: 1.1,
   intros: [
-    '好，各位！今天我們要來聊一個超有趣的主題，你聽完保證會覺得「哇！原來是這樣！」',
-    '各位，今天的內容真的超級有趣！先做好心理準備喔！',
-    '嗨大家好，說書時間到了！這個主題我看了之後直接說：等等，這也太厲害了吧！',
-    '準備好了嗎？我們今天要一起探索這個非常有意思的內容，保證讓你大開眼界！',
+    '',
   ],
   outros: [
-    '怎麼樣，是不是超有趣的！記得跟朋友分享喔！',
-    '好，這一頁的說書就到這裡！是不是學到不少？',
-    '超有趣對吧！知識就是這麼好玩，繼續看下一頁吧！',
-    '以上就是這頁的重點，啾啾鞋說書，繼續翻頁！',
+    '',
   ],
   transform(text) {
     return text
@@ -702,15 +696,19 @@ async function startReading() {
   utterance.onstart = () => {
     isPlaying = true; isPaused = false;
     document.getElementById('btnPlay').textContent = '⏸';
-    setStatus('reading'); showReadingBadge(true);
-    // 開始朗讀時也觸發預載
+    setStatus('reading');
+    showReadingBadge(true);
     prefetchPages(currentPage);
+    // 顯示朗讀中標籤（閱讀模式）
+    const b2 = document.getElementById('readingBadge2');
+    if (b2) b2.style.display = 'inline-flex';
   };
 
   utterance.onend = () => {
     isPlaying = false; isPaused = false;
     document.getElementById('btnPlay').textContent = '▶';
     showReadingBadge(false);
+    const _b2 = document.getElementById('readingBadge2'); if (_b2) _b2.style.display = 'none';
     if (currentPage < totalPages) {
       currentPage++;
       const flipPromise = pdfDoc ? renderPage(currentPage) : Promise.resolve(showJsonPage(currentPage));
@@ -1023,35 +1021,46 @@ function loadJson(file) {
 function showJsonPage(pageNum) {
   currentPage = pageNum;
 
-  const text       = pageTexts[pageNum - 1] || '';
-  const textScroll = document.getElementById('textScroll');
-  const charBadge  = document.getElementById('charBadge');
+  const text = pageTexts[pageNum - 1] || '';
 
-  textScroll.textContent    = text;
-  charBadge.textContent     = `✅ ${text.length} 字`;
-  charBadge.style.cssText   = 'background:rgba(46,158,110,0.15);color:#2e9e6e;border:1px solid rgba(46,158,110,0.3)';
+  // ── 切換到全版閱讀模式 ──
+  const pdfLayout    = document.getElementById('pdfLayout');
+  const readerLayout = document.getElementById('readerLayout');
+  if (pdfLayout)    pdfLayout.style.display    = 'none';
+  if (readerLayout) readerLayout.style.display = 'flex';
+
+  // ── 填充閱讀內容 ──
+  const readerBody = document.getElementById('readerBody');
+  if (readerBody) {
+    // 把文字拆成段落，每段用 <p> 包起來方便高亮
+    readerBody.innerHTML = text
+      ? text.split(/ + /).filter(s => s.trim()).map((para, i) =>
+          `<p class="reader-para" data-idx="${i}">${escHtml(para)}</p>`
+        ).join('')
+      : '<p class="reader-empty">（此頁無文字）</p>';
+  }
+
+  // ── 更新標題 ──
+  const title = document.getElementById('nowTitle')?.textContent || '';
+  const titleEl = document.getElementById('readerTitleLabel');
+  if (titleEl) titleEl.textContent = `${title} · 第 ${pageNum} / ${totalPages} 頁`;
+
+  // ── char badge ──
+  document.querySelectorAll('#charBadge').forEach(el => {
+    el.textContent   = `${text.length} 字`;
+    el.style.cssText = 'background:rgba(46,158,110,0.15);color:#2e9e6e;border:1px solid rgba(46,158,110,0.3)';
+  });
 
   document.getElementById('pageCurrentLabel').textContent = pageNum;
   document.getElementById('btnPrevPage').disabled = pageNum <= 1;
   document.getElementById('btnNextPage').disabled = pageNum >= totalPages;
   updateProgress();
-
-  // canvas 顯示佔位
-  const canvas = document.getElementById('pdfCanvas');
-  const ctx    = canvas.getContext('2d');
-  canvas.width  = 400;
-  canvas.height = 300;
-  ctx.fillStyle = '#f5ede2';
-  ctx.fillRect(0, 0, 400, 300);
-  ctx.fillStyle = '#c8a882';
-  ctx.font      = 'bold 15px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('📄 從 JSON 快取載入', 200, 140);
-  ctx.font      = '12px sans-serif';
-  ctx.fillStyle = '#9c7a5a';
-  ctx.fillText('無需原始 PDF，直接朗讀', 200, 165);
-
   showPageView();
+}
+
+// HTML 跳脫（防止 XSS）
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 
@@ -1407,8 +1416,14 @@ function showEmpty() {
 function showPageView() {
   document.getElementById('emptyState').style.display   = 'none';
   document.getElementById('loadingState').style.display = 'none';
-  document.getElementById('pageView').style.display     = 'grid';
   document.getElementById('errorState').style.display   = 'none';
+  document.getElementById('pageView').style.display     = 'flex';
+
+  // PDF 模式顯示左圖右文，JSON 模式顯示全版閱讀
+  const pdfLayout    = document.getElementById('pdfLayout');
+  const readerLayout = document.getElementById('readerLayout');
+  if (pdfLayout)    pdfLayout.style.display    = pdfDoc ? 'flex' : 'none';
+  if (readerLayout) readerLayout.style.display = pdfDoc ? 'none' : 'flex';
 }
 
 function showError(message, tips = []) {
