@@ -1574,6 +1574,12 @@ input[type="range"]::-webkit-slider-thumb:hover {
   font-size: 0.66rem;
 }
 
+.mybooks-hint-step {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+}
+
 .mybooks-hint-code {
   background: #1a2f22;
   color: #5ddb8a;
@@ -1583,4 +1589,146 @@ input[type="range"]::-webkit-slider-thumb:hover {
   border-radius: 6px;
   margin: 0.3rem 0;
   word-break: break-all;
+}
+
+/* ── API Key 驗證提示 ────────────────────── */
+@keyframes shake-panel {
+  0%,100% { transform: translateX(0); }
+  20%     { transform: translateX(-6px); }
+  40%     { transform: translateX(6px); }
+  60%     { transform: translateX(-4px); }
+  80%     { transform: translateX(4px); }
+}
+
+.shake-panel {
+  animation: shake-panel 0.4s ease;
+}
+
+.api-key-hint {
+  margin-top: 0.5rem;
+  background: rgba(220, 50, 50, 0.1);
+  border: 1px solid rgba(220, 50, 50, 0.3);
+  border-radius: 7px;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.68rem;
+  color: #c0392b;
+  font-weight: 600;
+  animation: fadeInDown 0.2s ease;
+}
+
+/* ── 下載確認 Overlay ────────────────────── */
+.dl-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeIn 0.2s ease;
+}
+
+.dl-box {
+  background: white;
+  border-radius: 20px;
+  padding: 2.5rem 2rem;
+  max-width: 380px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.25);
+  animation: slideUp 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.dl-icon {
+  font-size: 3rem;
+  line-height: 1;
+  margin-bottom: 0.3rem;
+}
+
+.dl-title {
+  font-size: 1.3rem;
+  font-weight: 900;
+  color: #1a1208;
+}
+
+.dl-book-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--orange);
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dl-pages {
+  font-size: 0.75rem;
+  color: #888;
+  background: #f5f0e8;
+  border-radius: 20px;
+  padding: 0.25rem 0.9rem;
+}
+
+.dl-desc {
+  font-size: 0.72rem;
+  color: #999;
+  line-height: 1.6;
+  margin-top: 0.3rem;
+}
+
+.dl-desc code {
+  background: #f0ebe0;
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+  color: #7a5a2a;
+  font-size: 0.68rem;
+}
+
+.dl-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.dl-btn-primary {
+  width: 100%;
+  padding: 0.85rem;
+  background: linear-gradient(135deg, var(--orange), var(--orange2));
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-family: 'Noto Sans TC', sans-serif;
+  cursor: pointer;
+  box-shadow: 0 4px 14px var(--shadow);
+  transition: all 0.2s;
+}
+
+.dl-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px var(--shadow);
+}
+
+.dl-btn-secondary {
+  width: 100%;
+  padding: 0.6rem;
+  background: none;
+  color: #aaa;
+  border: none;
+  font-size: 0.75rem;
+  font-family: 'Noto Sans TC', sans-serif;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.dl-btn-secondary:hover {
+  color: #666;
 }

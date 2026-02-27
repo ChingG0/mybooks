@@ -92,7 +92,10 @@ const pdfFileInput = document.getElementById('pdfFileInput');
 
 pdfFileInput.addEventListener('change', e => {
   const file = e.target.files[0];
-  if (file) { log(`📄 選擇: ${file.name}`); loadPDF(file); }
+  if (!file) return;
+  if (!checkApiKey()) return;
+  log(`📄 選擇: ${file.name}`);
+  loadPDF(file);
 });
 
 uploadZone.addEventListener('dragover',  e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
@@ -101,86 +104,216 @@ uploadZone.addEventListener('drop', e => {
   e.preventDefault();
   uploadZone.classList.remove('drag-over');
   const file = e.dataTransfer.files[0];
-  if (file) loadPDF(file);
+  if (!file) return;
+  if (!checkApiKey()) return;
+  loadPDF(file);
 });
 
+// ── API Key 檢查 ────────────────────────────
+function checkApiKey() {
+  const key = (document.getElementById('apiKeyInput')?.value || '').trim();
+  if (key) return true;
 
-// ── 讀取 PDF（只解析結構，不 OCR）─────────
+  // 沒填 → 搖動 API Key 欄位並提示
+  const panel = document.getElementById('apiKeyInput');
+  const wrap  = panel?.closest('.panel') || panel?.parentElement;
+
+  // 高亮欄位
+  if (panel) {
+    panel.style.borderColor = '#e55';
+    panel.style.boxShadow   = '0 0 0 3px rgba(220,50,50,0.18)';
+    panel.focus();
+    setTimeout(() => {
+      panel.style.borderColor = '';
+      panel.style.boxShadow   = '';
+    }, 2500);
+  }
+
+  // 搖動整個 panel
+  if (wrap) {
+    wrap.classList.remove('shake-panel');
+    void wrap.offsetWidth;
+    wrap.classList.add('shake-panel');
+  }
+
+  // 顯示提示訊息
+  showApiKeyHint();
+
+  // 重置 file input（讓同一個檔案也能重新觸發）
+  pdfFileInput.value = '';
+  return false;
+}
+
+function showApiKeyHint() {
+  let hint = document.getElementById('apiKeyHint');
+  if (!hint) {
+    hint = document.createElement('div');
+    hint.id        = 'apiKeyHint';
+    hint.className = 'api-key-hint';
+    const panel = document.getElementById('apiKeyInput')?.closest('.panel');
+    if (panel) panel.appendChild(hint);
+  }
+  hint.textContent = '⚠️ 請先填入 API Key 再上傳 PDF';
+  hint.style.display = 'block';
+  clearTimeout(hint._timer);
+  hint._timer = setTimeout(() => hint.style.display = 'none', 3000);
+}
+
+
+// ── 讀取 PDF → 全自動辨識 → 下載 JSON ────
 async function loadPDF(file) {
   if (file.type !== 'application/pdf') {
-    showError(`不支援的格式：${file.type || '未知'}`, [
-      '請上傳 <strong>.pdf</strong> 檔案',
-    ]);
+    showError(`不支援的格式：${file.type || '未知'}`, ['請上傳 <strong>.pdf</strong> 檔案']);
     return;
   }
 
   stopReading();
   showLoading();
-  setStep('step-read', 'active');
-  setBarProgress(5, '讀取檔案...', `${Math.round(file.size/1024)} KB`);
+
+  const title = file.name.replace(/\.pdf$/i, '');
 
   try {
-    // Step 1: ArrayBuffer
+    // ── Step 1: 讀取檔案 ──
+    setStep('step-read', 'active');
+    setBarProgress(5, '讀取檔案...', `${Math.round(file.size/1024)} KB`);
     const buf = await file.arrayBuffer();
     setStep('step-read', 'done');
-    setBarProgress(20, '檔案讀取完成', `${Math.round(buf.byteLength/1024)} KB`);
+    setBarProgress(15, '檔案讀取完成', `${Math.round(buf.byteLength/1024)} KB`);
 
-    // Step 2: PDF.js 解析
+    // ── Step 2: PDF.js 解析 ──
     setStep('step-parse', 'active');
-    setBarProgress(30, '解析 PDF 結構...', '');
+    setBarProgress(20, '解析 PDF 結構...', '');
     pdfDoc     = await pdfjsLib.getDocument({ data: buf }).promise;
     totalPages = pdfDoc.numPages;
     log(`✅ PDF 解析完成，共 ${totalPages} 頁`, 'ok');
     setStep('step-parse', 'done');
-    setBarProgress(50, `PDF 解析完成`, `共 ${totalPages} 頁`);
+    setBarProgress(25, `共 ${totalPages} 頁`, '開始辨識...');
 
-    // Step 3: 偵測是否有內嵌文字
+    // ── Step 3: 偵測 PDF 類型 ──
     setStep('step-text', 'active');
-    setBarProgress(55, '偵測 PDF 類型...', '');
-    const trialPage    = await pdfDoc.getPage(1);
-    const trialContent = await trialPage.getTextContent();
+    const trialContent = await (await pdfDoc.getPage(1)).getTextContent();
     hasEmbedded = trialContent.items.filter(i => i.str.trim()).length > 10;
-    log(`  PDF 類型: ${hasEmbedded ? '✅ 內嵌文字' : '📷 掃描圖片，將使用 OCR'}`, hasEmbedded ? 'ok' : 'warn');
-
-    // 初始化快取（全部設為 null = 未處理）
-    pageTexts    = new Array(totalPages).fill(null);
-    ocrInProgress = {};
+    log(`PDF 類型: ${hasEmbedded ? '內嵌文字' : '掃描圖片 → OCR'}`, hasEmbedded ? 'ok' : 'warn');
     setStep('step-text', 'done');
-    setBarProgress(70, hasEmbedded ? '內嵌文字，無需 OCR' : '掃描 PDF，將按需 OCR', '');
 
-    // Step 4: 渲染並 OCR 第一頁
+    // 初始化
+    pageTexts     = new Array(totalPages).fill(null);
+    ocrInProgress = {};
+    currentPage   = 1;
+
+    // ── Step 4: 全部頁面辨識 ──
     setStep('step-render', 'active');
-    setBarProgress(80, '載入第一頁...', '');
-    currentPage = 1;
-    await renderPage(currentPage);    // 會觸發 OCR
-    setStep('step-render', 'done');
-    setBarProgress(100, '完成！可以開始閱讀', '🎉');
 
-    // 更新 UI
+    for (let p = 1; p <= totalPages; p++) {
+      const pct = Math.round(25 + (p / totalPages) * 70);
+      setBarProgress(pct, `辨識第 ${p} / ${totalPages} 頁...`, `${Math.round((p/totalPages)*100)}%`);
+      updateOcrCounter(p, totalPages);
+
+      if (hasEmbedded) {
+        pageTexts[p-1] = await extractVerticalTextFallback(p);
+      } else {
+        pageTexts[p-1] = await ocrOnePage(p);
+      }
+
+      log(`  ✅ 第 ${p}/${totalPages} 頁完成，${pageTexts[p-1].length} 字`, 'ok');
+    }
+
+    setStep('step-render', 'done');
+    setBarProgress(100, `✅ 全部 ${totalPages} 頁辨識完成！`, '點下方按鈕下載');
+    log(`✅ 全部 ${totalPages} 頁辨識完成`, 'ok');
+
+    // 加入藏書
+    addToLibrary({
+      bookId:     'mybooks_' + title.replace(/[^a-zA-Z0-9一-鿿]/g, '_'),
+      title,
+      totalPages,
+      totalChars: pageTexts.reduce((s, t) => s + (t||'').length, 0),
+      pages:      pageTexts.map((text, i) => ({ page: i+1, text: text||'' })),
+    });
+
+    // 顯示下載按鈕
+    showDownloadReady(title);
+
+    // ── 更新 UI，進入閱讀模式 ──
     document.getElementById('fileInfo').style.display      = 'flex';
     document.getElementById('fileNameLabel').textContent   = file.name;
     document.getElementById('fileDetailLabel').textContent = `${totalPages} 頁 · ${Math.round(file.size/1024)} KB`;
-    document.getElementById('nowTitle').textContent        = file.name.replace('.pdf','');
-    document.getElementById('nowSub').textContent          = hasEmbedded
-      ? `共 ${totalPages} 頁 · 內嵌文字 · 直接朗讀`
-      : `共 ${totalPages} 頁 · 掃描 PDF · 按需 OCR（邊讀邊辨識）`;
+    document.getElementById('nowTitle').textContent        = title;
+    document.getElementById('nowSub').textContent          = `✅ 辨識完成 · ${totalPages} 頁 · 已自動下載 JSON`;
     document.getElementById('pageTotalLabel').textContent  = totalPages;
     document.getElementById('btnPrevPage').disabled        = false;
     document.getElementById('btnNextPage').disabled        = false;
     document.getElementById('btnPlay').disabled            = false;
     document.getElementById('progressBarRow').style.display = 'flex';
 
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 800));
+    await renderPage(1);
     showPageView();
-    log('✅ 載入完成，進入按需 OCR 模式', 'ok');
 
   } catch (err) {
     log(`❌ ${err.message}`, 'error');
-    showError(err.message, [
-      '確認是標準 PDF 格式（非加密）',
-      `錯誤：${err.message}`,
-    ]);
+    showError(err.message, ['確認是標準 PDF 格式（非加密）', `錯誤：${err.message}`]);
   }
+}
+
+// ── 建立書本 JSON 物件 ──────────────────────
+function buildBookJson(title) {
+  return {
+    title,
+    totalPages,
+    savedAt: new Date().toISOString(),
+    pages: pageTexts.map((text, i) => ({ page: i + 1, text: text || '' })),
+  };
+}
+
+// ── 下載 JSON 檔案 ──────────────────────────
+function downloadJson(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── 顯示下載準備完成 UI ────────────────────
+function showDownloadReady(title) {
+  const overlay = document.getElementById('downloadReadyOverlay');
+  if (!overlay) return;
+
+  document.getElementById('downloadReadyTitle').textContent  = `《${title}》`;
+  document.getElementById('downloadReadyPages').textContent  = `共 ${totalPages} 頁・${pageTexts.reduce((s,t)=>s+(t||'').length,0).toLocaleString()} 字`;
+  overlay.style.display = 'flex';
+
+  // 儲存 title 供按鈕使用
+  overlay.dataset.title = title;
+}
+
+function doDownload() {
+  const overlay = document.getElementById('downloadReadyOverlay');
+  const title   = overlay?.dataset.title || '書籍';
+  const jsonData = buildBookJson(title);
+
+  // 下載書籍 JSON
+  downloadJson(jsonData, `${title}.juju.json`);
+
+  // 更新 books.json
+  autoUpdateBooksJson(title);
+
+  // 關閉 overlay
+  overlay.style.display = 'none';
+  log(`💾 已下載 ${title}.juju.json`, 'ok');
+}
+
+function cancelDownload() {
+  document.getElementById('downloadReadyOverlay').style.display = 'none';
+}
+
+// ── 顯示辨識計數器 ──────────────────────────
+function updateOcrCounter(current, total) {
+  const el = document.getElementById('cacheStatus');
+  if (el) el.textContent = `辨識中 ${current}/${total} 頁`;
 }
 
 
@@ -715,13 +848,10 @@ function updateCacheStatus() {
   const el   = document.getElementById('cacheStatus');
   if (el) el.textContent = `已辨識 ${done}/${totalPages} 頁`;
 
-  // 全部辨識完畢 → 顯示存檔按鈕
+  // 全部辨識完畢（按需 OCR 模式才需要）
   if (done === totalPages && totalPages > 0) {
-    const btn = document.getElementById('btnSaveJson');
-    if (btn) {
-      btn.style.display = 'flex';
-      btn.classList.add('pulse-once');
-    }
+    const el = document.getElementById('cacheStatus');
+    if (el) el.textContent = `✅ 全部 ${totalPages} 頁已辨識`;
   }
 }
 

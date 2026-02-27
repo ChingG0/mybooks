@@ -287,6 +287,64 @@
 
 <script src="app.js"></script>
 
+<!-- ── 下載確認 Overlay ── -->
+<div id="downloadReadyOverlay" class="dl-overlay" style="display:none">
+  <div class="dl-box">
+    <div class="dl-icon">🎉</div>
+    <div class="dl-title">辨識完成！</div>
+    <div class="dl-book-title" id="downloadReadyTitle"></div>
+    <div class="dl-pages" id="downloadReadyPages"></div>
+    <div class="dl-desc">
+      下載後將兩個檔案放入 <code>mybooks/</code> 資料夾，再 git push 即可上架。
+    </div>
+    <div class="dl-actions">
+      <button class="dl-btn-primary" onclick="doDownload()">
+        💾 下載 JSON 檔案
+      </button>
+      <button class="dl-btn-secondary" onclick="cancelDownload()">
+        稍後再說
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── API Key 入口遮罩 ── -->
+<div id="apiGate" class="api-gate-overlay">
+  <div class="api-gate-box">
+    <div class="api-gate-logo">👟</div>
+    <div class="api-gate-title">啾啾說書</div>
+    <div class="api-gate-sub">輸入 Google Vision API Key 開始使用</div>
+
+    <div class="api-gate-input-wrap">
+      <input type="password" id="apiGateInput" class="api-gate-input"
+             placeholder="AIzaSy..."
+             autocomplete="off"
+             onkeydown="if(event.key==='Enter') confirmApiKey()">
+      <button class="api-gate-show-btn" onclick="toggleGateKeyVisible()" title="顯示/隱藏">👁</button>
+    </div>
+
+    <div class="api-gate-error" id="apiGateError"></div>
+
+    <button class="api-gate-btn" onclick="confirmApiKey()">
+      開始使用 →
+    </button>
+
+    <div class="api-gate-hint">
+      還沒有 API Key？
+      <a href="https://console.cloud.google.com/apis/credentials" target="_blank">
+        Google Cloud Console 取得 →
+      </a>
+      <br>每月前 1000 次辨識免費
+    </div>
+
+    <div class="api-gate-divider">或</div>
+
+    <button class="api-gate-skip-btn" onclick="skipApiKey()">
+      📚 只看藏書（不辨識新書）
+    </button>
+  </div>
+</div>
+
 <!-- ── 藏書 Modal ── -->
 <div id="libraryModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeLibraryModal()">
   <div class="modal-box">
