@@ -42,10 +42,16 @@ const PREFETCH     = 2;       // 預載接下來幾頁
 const JUJU = {
   pitch: 1.1,
   intros: [
-    '',
+    '好，各位！今天我們要來聊一個超有趣的主題，你聽完保證會覺得「哇！原來是這樣！」',
+    '各位，今天的內容真的超級有趣！先做好心理準備喔！',
+    '嗨大家好，說書時間到了！這個主題我看了之後直接說：等等，這也太厲害了吧！',
+    '準備好了嗎？我們今天要一起探索這個非常有意思的內容，保證讓你大開眼界！',
   ],
   outros: [
-    '',
+    '怎麼樣，是不是超有趣的！記得跟朋友分享喔！',
+    '好，這一頁的說書就到這裡！是不是學到不少？',
+    '超有趣對吧！知識就是這麼好玩，繼續看下一頁吧！',
+    '以上就是這頁的重點，啾啾鞋說書，繼續翻頁！',
   ],
   transform(text) {
     return text
@@ -282,8 +288,8 @@ function showDownloadReady(title) {
   const overlay = document.getElementById('downloadReadyOverlay');
   if (!overlay) return;
 
-  document.getElementById('downloadReadyTitle').textContent  = `《${title}》`;
-  document.getElementById('downloadReadyPages').textContent  = `共 ${totalPages} 頁・${pageTexts.reduce((s,t)=>s+(t||'').length,0).toLocaleString()} 字`;
+  document.getElementById('downloadReadyTitle').textContent = `《${title}》`;
+  document.getElementById('downloadReadyPages').textContent = `共 ${totalPages} 頁・${pageTexts.reduce((s,t)=>s+(t||'').length,0).toLocaleString()} 字`;
   overlay.style.display = 'flex';
 
   // 儲存 title 供按鈕使用
@@ -295,15 +301,12 @@ function doDownload() {
   const title   = overlay?.dataset.title || '書籍';
   const jsonData = buildBookJson(title);
 
-  // 下載書籍 JSON
+  // 只下載書籍 JSON，不需要 books.json
   downloadJson(jsonData, `${title}.juju.json`);
 
-  // 更新 books.json
-  autoUpdateBooksJson(title);
-
-  // 關閉 overlay
   overlay.style.display = 'none';
   log(`💾 已下載 ${title}.juju.json`, 'ok');
+  log(`👉 把檔案放入 mybooks/ → git push → 所有裝置自動讀取`, 'ok');
 }
 
 function cancelDownload() {
@@ -944,10 +947,9 @@ async function autoUpdateBooksJson(newTitle) {
   if (!hint) return;
 
   hint.innerHTML = `
-    <div class="mybooks-hint-title">📁 兩個檔案放進 mybooks/</div>
-    <div class="mybooks-hint-step">① <code>${newFilename}</code> ← 剛才下載的書</div>
-    <div class="mybooks-hint-step">② <code>books.json</code> ← 剛才自動下載的更新版</div>
-    <div class="mybooks-hint-step" style="margin-top:0.4rem">覆蓋舊的 books.json → git push → 完成 ✅</div>
+    <div class="mybooks-hint-title">📁 一個步驟搞定</div>
+    <div class="mybooks-hint-step">① 把 <code>${newFilename}</code> 放入 <code>mybooks/</code></div>
+    <div class="mybooks-hint-step" style="margin-top:0.4rem">② git push → 重整頁面，書自動出現 ✅</div>
   `;
   hint.style.display = 'block';
 
@@ -1057,8 +1059,12 @@ function showJsonPage(pageNum) {
 // 我的藏書（localStorage 持久化）
 // ═══════════════════════════════════════════
 
-const LIBRARY_KEY = 'juju_library';      // 書目清單
+// 書籍資料來自 mybooks/（GitHub 同步）
+// 進度資料存 localStorage（各裝置獨立）
 const PROGRESS_KEY = 'juju_progress';    // 每本書的閱讀進度
+
+// 記憶體快取（從 mybooks/ 載入後暫存）
+let _booksCache = null;
 
 // 書本 spine 顏色循環
 const SPINE_COLORS = [
@@ -1070,14 +1076,16 @@ function getSpineColor(idx) {
   return SPINE_COLORS[idx % SPINE_COLORS.length];
 }
 
-// ── 讀取 / 寫入 Library ─────────────────────
+// ── 讀取書庫（從記憶體快取）──────────────────
+// 實際載入由 loadMyBooksFolder() 負責，結果存 _booksCache
 function getLibrary() {
-  try { return JSON.parse(localStorage.getItem(LIBRARY_KEY) || '[]'); }
-  catch { return []; }
+  return _booksCache || [];
 }
 
+// saveLibrary 在新架構不再寫 localStorage
+// 書籍透過 git push mybooks/ 管理
 function saveLibrary(books) {
-  localStorage.setItem(LIBRARY_KEY, JSON.stringify(books));
+  _booksCache = books;  // 只更新記憶體快取
 }
 
 function getProgress() {
@@ -1102,27 +1110,53 @@ function addToLibrary(jsonData) {
     totalPages: jsonData.totalPages,
     totalChars: jsonData.totalChars || 0,
     addedAt:    new Date().toISOString(),
-    pages:      jsonData.pages,   // 儲存完整頁面資料
+    pages:      jsonData.pages,
   };
 
   if (existing >= 0) books[existing] = entry;
-  else books.unshift(entry);  // 最新的排最前面
+  else books.unshift(entry);
 
-  saveLibrary(books);
+  _booksCache = books;        // 只更新記憶體快取
+  currentBookId = entry.id;
   renderLibrary();
-  currentBookId = entry.id;   // 設定目前書 id
-  log(`📚 「${entry.title}」已加入藏書`, 'ok');
+  log(`📚 「${entry.title}」加入藏書（本次 session）`, 'ok');
 }
 
 // ── 從藏書開啟書本 ───────────────────────────
-function openBook(bookId) {
+async function openBook(bookId) {
   const books = getLibrary();
   const book  = books.find(b => b.id === bookId);
   if (!book) return;
 
   stopReading();
+  closeLibraryModal();
 
-  // 載入狀態（類似 loadJson）
+  // 如果 pages 還沒載入，現在 fetch
+  if (!book.pages) {
+    log(`📥 載入「${book.title}」...`);
+
+    // 顯示讀取中
+    document.getElementById('nowTitle').textContent = book.title;
+    document.getElementById('nowSub').textContent   = '載入中...';
+    document.getElementById('fileInfo').style.display = 'flex';
+
+    try {
+      const r = await fetchMyBook(book.filename);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+
+      book.pages      = data.pages || [];
+      book.totalPages = data.totalPages || book.pages.length;
+      book.totalChars = book.pages.reduce((s, p) => s + (p.text || '').length, 0);
+      book.title      = data.title || book.title;
+      book.loaded     = true;
+    } catch (e) {
+      log(`❌ 無法載入「${book.title}」: ${e.message}`, 'error');
+      return;
+    }
+  }
+
+  // 載入狀態
   pdfDoc        = null;
   totalPages    = book.totalPages;
   hasEmbedded   = true;
@@ -1130,17 +1164,17 @@ function openBook(bookId) {
   ocrInProgress = {};
 
   // 恢復上次閱讀進度
-  const prog = getProgress();
+  const prog     = getProgress();
   const lastPage = prog[bookId]?.page || 1;
-  currentPage = Math.min(lastPage, totalPages);
+  currentPage    = Math.min(lastPage, totalPages);
 
   // 更新 UI
   document.getElementById('fileInfo').style.display      = 'flex';
   document.getElementById('fileNameLabel').textContent   = book.title;
   document.getElementById('fileDetailLabel').textContent =
     `${totalPages} 頁 · ${(book.totalChars/1000).toFixed(1)}k 字`;
-  document.getElementById('nowTitle').textContent        = book.title;
-  document.getElementById('nowSub').textContent          =
+  document.getElementById('nowTitle').textContent = book.title;
+  document.getElementById('nowSub').textContent   =
     lastPage > 1
       ? `📖 從第 ${currentPage} 頁繼續 · 共 ${totalPages} 頁`
       : `📖 共 ${totalPages} 頁 · 點播放開始朗讀`;
@@ -1150,32 +1184,37 @@ function openBook(bookId) {
   document.getElementById('btnPlay').disabled            = false;
   document.getElementById('progressBarRow').style.display = 'flex';
 
-  currentBookId = bookId;   // 記住目前書 id
+  currentBookId = bookId;
   showJsonPage(currentPage);
   updateCacheStatus();
-  closeLibraryModal();
-  renderLibrary();  // 更新藏書高亮
+  renderLibrary();
 
   log(`📖 開啟「${book.title}」，從第 ${currentPage} 頁`, 'ok');
 }
 
 // ── 刪除藏書 ────────────────────────────────
 function deleteBook(bookId, e) {
-  e.stopPropagation();  // 不觸發 openBook
-  const books   = getLibrary();
-  const book    = books.find(b => b.id === bookId);
+  e.stopPropagation();
+  const books = getLibrary();
+  const book  = books.find(b => b.id === bookId);
   if (!book) return;
-  if (!confirm(`確定刪除「${book.title}」？`)) return;
 
-  saveLibrary(books.filter(b => b.id !== bookId));
+  if (!confirm(`「${book.title}」
+
+注意：這只會從本次畫面移除。
+若要永久刪除，請同時從 mybooks/ 資料夾刪除對應 .juju.json 並更新 books.json，再 git push。`)) return;
+
+  // 只從記憶體快取移除
+  _booksCache = books.filter(b => b.id !== bookId);
 
   // 清除進度
   const prog = getProgress();
   delete prog[bookId];
   localStorage.setItem(PROGRESS_KEY, JSON.stringify(prog));
 
+  if (currentBookId === bookId) currentBookId = null;
   renderLibrary();
-  log(`🗑️ 已刪除「${book.title}」`, 'warn');
+  log(`🗑️ 已從畫面移除「${book.title}」（刷新頁面會重新從 mybooks/ 載入）`, 'warn');
 }
 
 // ── Modal 開關 ─────────────────────────────
@@ -1249,9 +1288,12 @@ function deleteBookModal(bookId, e) {
   e.stopPropagation();
   const books = getLibrary();
   const book  = books.find(b => b.id === bookId);
-  if (!book || !confirm(`確定刪除「${book.title}」？`)) return;
-  saveLibrary(books.filter(b => b.id !== bookId));
-  const prog = getProgress();
+  if (!book || !confirm(`「${book.title}」
+
+注意：這只從畫面移除。永久刪除請從 mybooks/ 刪除檔案並更新 books.json 後 git push。`)) return;
+
+  _booksCache = books.filter(b => b.id !== bookId);
+  const prog  = getProgress();
   delete prog[bookId];
   localStorage.setItem(PROGRESS_KEY, JSON.stringify(prog));
   if (currentBookId === bookId) currentBookId = null;
@@ -1451,109 +1493,94 @@ function updateProgress() {
 //   2. 在 books.json 的 books 陣列新增 { "filename": "書名.juju.json" }
 // ═══════════════════════════════════════════
 
-async function loadMyBooksFolder() {
-  try {
-    // ── 策略：直接嘗試載入 books.json 索引
-    // 若不存在，改用 GitHub Pages 目錄掃描備用方案
-    const filenames = await getMyBooksFilenames();
+// ═══════════════════════════════════════════
+// 從 mybooks/books.json 讀取書目索引
+// 只存書名和檔名，不預載頁面內容
+// 點書時才去 fetch 對應的 .juju.json
+// ═══════════════════════════════════════════
+// ── fetch mybooks/ 檔案（繞過中文編碼問題）──
+async function fetchMyBook(filename) {
+  // 用 XMLHttpRequest 避免 fetch 自動編碼中文路徑
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', './mybooks/' + filename + '?t=' + Date.now(), true);
+    xhr.responseType = 'text';
+    xhr.onload = () => {
+      // 模擬 fetch Response 介面
+      resolve({
+        ok:   xhr.status >= 200 && xhr.status < 300,
+        status: xhr.status,
+        json: () => Promise.resolve(JSON.parse(xhr.responseText)),
+      });
+    };
+    xhr.onerror = () => resolve({ ok: false, status: 0, json: () => Promise.resolve(null) });
+    xhr.send();
+  });
+}
 
-    if (filenames.length === 0) {
-      log('📁 mybooks/ 無新書籍', 'info');
+async function loadMyBooksFolder() {
+  _booksCache = [];
+
+  try {
+    const res = await fetch('./mybooks/books.json?t=' + Date.now());
+    if (!res.ok) {
+      log('📁 mybooks/books.json 不存在', 'warn');
+      renderLibrary();
       return;
     }
 
-    log(`📁 mybooks/ 找到 ${filenames.length} 個檔案，載入中...`);
-    let added = 0;
+    const index = await res.json();
+    const list  = (index.books || []).map(b => b.filename).filter(Boolean);
 
-    for (const filename of filenames) {
-      try {
-        const res = await fetch(`./mybooks/${encodeURIComponent(filename)}?t=` + Date.now());
-        if (!res.ok) { log(`  ⚠️ 無法讀取: ${filename}`, 'warn'); continue; }
-
-        const data = await res.json();
-        if (!data.pages || !Array.isArray(data.pages)) {
-          log(`  ⚠️ ${filename} 格式不正確`, 'warn');
-          continue;
-        }
-
-        // 用檔名當唯一 id，避免重複加入
-        const bookId = 'mybooks_' + filename.replace(/[^a-zA-Z0-9一-鿿]/g, '_');
-        if (getLibrary().find(b => b.id === bookId)) {
-          log(`  ○ 已存在: ${data.title || filename}`);
-          continue;
-        }
-
-        const entry = {
-          id:         bookId,
-          title:      data.title || filename.replace(/\.juju\.json$/i, ''),
-          totalPages: data.totalPages || data.pages.length,
-          totalChars: data.pages.reduce((s, p) => s + (p.text || '').length, 0),
-          addedAt:    new Date().toISOString(),
-          pages:      data.pages,
-          source:     'mybooks',
-        };
-
-        const books = getLibrary();
-        books.push(entry);
-        saveLibrary(books);
-        added++;
-        log(`  📚 加入: ${entry.title}（${entry.totalPages} 頁）`, 'ok');
-
-      } catch (e) {
-        log(`  ❌ ${filename}: ${e.message}`, 'error');
-      }
-    }
-
-    if (added > 0) {
+    if (list.length === 0) {
+      log('📁 books.json 是空的');
       renderLibrary();
-      log(`✅ mybooks/ 共載入 ${added} 本新書`, 'ok');
+      return;
     }
+
+    // 只建立輕量 index（不載入 pages 內容）
+    _booksCache = list.map(filename => {
+      const name = filename.replace(/\.juju\.json$/i, '');
+      return {
+        id:       'mybooks_' + name,
+        title:    name,
+        filename,
+        // pages 先不載入，點書時才 fetch
+        totalPages: null,
+        totalChars: null,
+        addedAt:    null,
+        loaded:     false,
+      };
+    });
+
+    renderLibrary();
+    log(`✅ 書目載入完成，共 ${_booksCache.length} 本`, 'ok');
+
+    // 背景非同步補全每本書的 metadata（頁數、字數）
+    loadBooksMetadata();
 
   } catch (err) {
-    log(`⚠️ mybooks/ 載入錯誤: ${err.message}`, 'warn');
+    log(`⚠️ books.json 載入失敗: ${err.message}`, 'warn');
+    renderLibrary();
   }
 }
 
-/**
- * 取得 mybooks/ 內所有 .juju.json 檔名
- * 三種方式依序嘗試：
- * 1. books.json 索引（最穩定，GitHub Pages 推薦）
- * 2. 目錄 HTML 解析（本機 Live Server 有效）
- * 3. 兩者都失敗 → 回傳空陣列
- */
-async function getMyBooksFilenames() {
-  // ── 方式 1：嘗試 books.json ──
-  try {
-    const res = await fetch('./mybooks/books.json?t=' + Date.now());
-    if (res.ok) {
-      const data = await res.json();
-      const list = (data.books || []).map(b => b.filename).filter(Boolean);
-      if (list.length > 0) {
-        log(`📋 books.json 索引：${list.length} 本`);
-        return list;
-      }
-    }
-  } catch {}
-
-  // ── 方式 2：嘗試解析目錄 HTML（Live Server / Apache 等有目錄列表時有效）──
-  try {
-    const res = await fetch('./mybooks/?t=' + Date.now());
-    if (res.ok) {
-      const html = await res.text();
-      // 從 <a href="..."> 抓出 .juju.json 檔名
-      const matches = [...html.matchAll(/href="([^"]*\.juju\.json)"/gi)];
-      const list = matches
-        .map(m => decodeURIComponent(m[1].split('/').pop()))
-        .filter(f => f && !f.startsWith('.'));
-      if (list.length > 0) {
-        log(`📂 目錄掃描：${list.length} 本`);
-        return list;
-      }
-    }
-  } catch {}
-
-  log('⚠️ 無法自動掃描 mybooks/，請確認 books.json 索引存在', 'warn');
-  return [];
+// 背景載入每本書的 metadata（不含 pages 內容）
+async function loadBooksMetadata() {
+  for (const book of _booksCache) {
+    if (book.loaded) continue;
+    try {
+      const r    = await fetchMyBook(book.filename);
+      if (!r.ok) continue;
+      const data = await r.json();
+      book.title      = data.title || book.title;
+      book.totalPages = data.totalPages || (data.pages || []).length;
+      book.totalChars = (data.pages || []).reduce((s, p) => s + (p.text || '').length, 0);
+      book.addedAt    = data.savedAt || new Date().toISOString();
+      book.loaded     = true;
+      renderLibrary();  // 逐本更新 UI
+    } catch {}
+  }
 }
 
 // ── 初始化 ─────────────────────────────────

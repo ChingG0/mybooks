@@ -1,6 +1,7 @@
 {
   "books": [
-    { "filename": "超級績效1.juju.json" },
-    { "filename": "超級績效2.juju.json" }
+    { "filename": "super1.juju.json" },
+    { "filename": "super2.juju.json" },
+    { "filename": "super3.juju.json" }
   ]
 }
